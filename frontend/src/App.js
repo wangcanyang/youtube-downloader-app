@@ -19,7 +19,7 @@ function App() {
   // 获取历史记录
   const fetchHistory = async () => {
     try {
-      const res = await axios.get('http://127.0.0.1:8000/api/history');
+      const res = await axios.get('https://youtube-downloader-app-production.up.railway.app/api/history');
       if (res.data.success) {
         setHistory(res.data.data);
       }
@@ -68,7 +68,7 @@ function App() {
     setLoading(true);
     setVideoInfo(null);
     try {
-      const res = await axios.get('http://127.0.0.1:8000/api/parse', {
+      const res = await axios.get('https://youtube-downloader-app-production.up.railway.app/api/parse', {
         params: { url },
       });
       if (res.data.success) {
@@ -93,7 +93,7 @@ function App() {
     const task_id = Date.now().toString();
     try {
       // 1. 启动下载任务
-      const res = await axios.get('http://127.0.0.1:8000/api/download', {
+      const res = await axios.get('https://youtube-downloader-app-production.up.railway.app/api/download', {
         params: { url, task_id },
       });
       if (!res.data.success) {
@@ -104,7 +104,7 @@ function App() {
       // 2. 轮询进度
       progressTimer.current = setInterval(async () => {
         try {
-          const resp = await axios.get('http://127.0.0.1:8000/api/progress', {
+          const resp = await axios.get('https://youtube-downloader-app-production.up.railway.app/api/progress', {
             params: { task_id },
           });
           setProgress(resp.data.progress);
@@ -112,7 +112,7 @@ function App() {
             clearInterval(progressTimer.current);
             setTimeout(async () => {
               // 3. 下载视频文件
-              const fileResp = await axios.get('http://127.0.0.1:8000/api/download', {
+              const fileResp = await axios.get('https://youtube-downloader-app-production.up.railway.app/api/download', {
                 params: { url, task_id },
                 responseType: 'blob',
               });
