@@ -1,4 +1,4 @@
-    fastapi==0.111.0
-    uvicorn==0.30.1
-    yt-dlp==2024.05.29
-    python-multipart==0.0.9
+fastapi==0.111.0
+uvicorn==0.30.1
+yt-dlp==2025.5.22  # 这一行被修改了
+python-multipart==0.0.9
