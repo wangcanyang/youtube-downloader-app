@@ -19,7 +19,7 @@ function App() {
   // 获取历史记录
   const fetchHistory = async () => {
     try {
-      const res = await axios.get('https://youtube-downloader-app-production.up.railway.app/api/history');
+      const res = await axios.get(`${process.env.REACT_APP_API_BASE_URL}/api/history`);
       if (res.data.success) {
         setHistory(res.data.data);
       }
@@ -68,7 +68,7 @@ function App() {
     setLoading(true);
     setVideoInfo(null);
     try {
-      const res = await axios.get('https://youtube-downloader-app-production.up.railway.app/api/parse', {
+      const res = await axios.get(`${process.env.REACT_APP_API_BASE_URL}/api/parse`, {
         params: { url },
       });
       if (res.data.success) {
@@ -91,44 +91,92 @@ function App() {
     setDownloading(true);
     setProgress(0);
     const task_id = Date.now().toString();
+    console.log('DEBUG (Frontend): Initiating download for task_id:', task_id);
     try {
       // 1. 启动下载任务
-      const res = await axios.get('https://youtube-downloader-app-production.up.railway.app/api/download', {
+      const res = await axios.get(`${process.env.REACT_APP_API_BASE_URL}/api/download`, {
         params: { url, task_id },
       });
       if (!res.data.success) {
         message.error('下载任务启动失败: ' + res.data.error);
         setDownloading(false);
+        console.error('DEBUG (Frontend): Download task initiation failed:', res.data.error);
         return;
       }
+      console.log('DEBUG (Frontend): Download task initiated successfully. Starting progress polling.');
       // 2. 轮询进度
       progressTimer.current = setInterval(async () => {
         try {
-          const resp = await axios.get('https://youtube-downloader-app-production.up.railway.app/api/progress', {
+          const resp = await axios.get(`${process.env.REACT_APP_API_BASE_URL}/api/progress`, {
             params: { task_id },
           });
           setProgress(resp.data.progress);
+          console.log('DEBUG (Frontend): Current progress:', resp.data.progress);
           if (resp.data.progress >= 100) {
             clearInterval(progressTimer.current);
+            console.log('DEBUG (Frontend): Download progress reached 100%. Attempting to fetch file.');
             setTimeout(async () => {
               // 3. 下载视频文件
-              const fileResp = await axios.get('https://youtube-downloader-app-production.up.railway.app/api/download', {
-                params: { url, task_id },
-                responseType: 'blob',
-              });
-              const blob = new Blob([fileResp.data], { type: 'video/mp4' });
-              const downloadUrl = window.URL.createObjectURL(blob);
-              const a = document.createElement('a');
-              a.href = downloadUrl;
-              a.download = 'video.mp4';
-              document.body.appendChild(a);
-              a.click();
-              a.remove();
-              window.URL.revokeObjectURL(downloadUrl);
-              message.success('下载成功');
-              setDownloading(false);
-              setProgress(0);
-              fetchHistory(); // 下载成功后刷新历史
+              try { // 添加新的try-catch块来捕获文件下载阶段的错误
+                const fileResp = await axios.get(`${process.env.REACT_APP_API_BASE_URL}/api/download`, {
+                  params: { url, task_id },
+                  responseType: 'blob',
+                });
+                console.log('DEBUG (Frontend): fileResp headers:', fileResp.headers);
+                const blob = new Blob([fileResp.data], { type: 'video/mp4' });
+                const downloadUrl = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = downloadUrl;
+                
+                // 从Content-Disposition头部获取文件名
+                let filename = 'video.mp4'; // 默认值
+                const contentDisposition = fileResp.headers['content-disposition'];
+                console.log('DEBUG (Frontend): Content-Disposition header:', contentDisposition);
+                if (contentDisposition) {
+                  // 尝试解析 RFC 5987 (filename*) 格式，优先处理 UTF-8 文件名
+                  const filenameStarMatch = contentDisposition.match(/filename\*=(.+)/);
+                  if (filenameStarMatch && filenameStarMatch[1]) {
+                    // 提取编码的文件名部分（跳过 charset''）
+                    const parts = filenameStarMatch[1].split("'"); // 使用双引号包裹单引号
+                    if (parts.length > 1) {
+                      const encodedFilename = parts.slice(1).join("'"); // 使用双引号包裹单引号
+                      try {
+                        filename = decodeURIComponent(encodedFilename);
+                      } catch (e) {
+                        console.error("DEBUG (Frontend): 解码 filename* 失败:", e);
+                        filename = encodedFilename; // 解码失败则使用原始编码值
+                      }
+                    }
+                  } else {
+                    // 回退到解析 RFC 2231 (filename) 格式
+                    const filenameMatch = contentDisposition.match(/filename="?([^"';]+)"?/);
+                    if (filenameMatch && filenameMatch[1]) {
+                      try {
+                        filename = decodeURIComponent(filenameMatch[1]);
+                      } catch (e) {
+                        console.error("DEBUG (Frontend): 解码 filename 失败:", e);
+                        filename = filenameMatch[1];
+                      }
+                    }
+                  }
+                }
+                a.download = filename;
+
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+                window.URL.revokeObjectURL(downloadUrl);
+                message.success('下载成功');
+                setDownloading(false);
+                setProgress(0);
+                fetchHistory(); // 下载成功后刷新历史
+                console.log('DEBUG (Frontend): File download completed.');
+              } catch (fileError) {
+                console.error('DEBUG (Frontend): Error fetching file:', fileError);
+                message.error('下载文件失败: ' + fileError.message);
+                setDownloading(false);
+                setProgress(0);
+              }
             }, 1000); // 延迟1秒，确保文件写入完成
           }
         } catch (err) {
@@ -136,12 +184,14 @@ function App() {
           message.error('下载失败，请检查后端服务或视频链接');
           setDownloading(false);
           setProgress(0);
+          console.error('DEBUG (Frontend): Error during progress polling or final download attempt:', err);
         }
       }, 1000);
     } catch (err) {
       message.error('下载失败，请检查后端服务或视频链接');
       setDownloading(false);
       setProgress(0);
+      console.error('DEBUG (Frontend): Initial download request failed:', err);
     }
   };
 

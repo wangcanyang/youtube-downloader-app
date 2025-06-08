@@ -9,6 +9,7 @@ import threading
 import json
 from datetime import datetime
 import time
+import re
 
 HISTORY_FILE = "download_history.json"
 
@@ -31,6 +32,15 @@ def add_history_record(title, filename, filesize):
     except Exception as e:
         print("写入历史记录失败：", e)
 
+def sanitize_filename(title: str) -> str:
+    # 替换非法字符为下划线
+    s = re.sub(r'[\/:*?"<>|]', '_', title)
+    # 移除首尾空格，并确保不为空
+    s = s.strip()
+    if not s:
+        s = "video"
+    return s
+
 app = FastAPI()
 
 # 允许跨域
@@ -40,6 +50,7 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["Content-Disposition"]
 )
 
 # 全局变量：记录每个下载任务的进度
@@ -101,7 +112,10 @@ def download_youtube(
                 except Exception:
                     pass
                 add_history_record(title, os.path.basename(output_path), filesize)
-                return FileResponse(output_path, filename="video.mp4", media_type="video/mp4")
+                # 使用 sanitize_filename 处理后的标题作为文件名
+                actual_filename = f"{sanitize_filename(title)}.mp4"
+                print(f"DEBUG: Returning file with filename: {actual_filename}")
+                return FileResponse(output_path, filename=actual_filename, media_type="video/mp4")
             else:
                 return JSONResponse(content={"success": False, "error": "文件不存在或未写入完成"})
 
